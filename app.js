@@ -386,6 +386,8 @@ function searchFoods(q) {
 function render() {
   $('#datenav').hidden = currentTab !== 'today';
   $('#dateLabel').textContent = dateLabel(viewDate);
+  $('#todayBtn').hidden = viewDate === todayStr();
+  document.body.classList.toggle('not-today', viewDate !== todayStr());
   if (currentTab === 'today') renderToday();
   if (currentTab === 'history') renderHistory();
   if (currentTab === 'settings') renderSettings();
@@ -633,7 +635,7 @@ function renderSettings() {
     <p>牛乳200mL：成分表の備考（100mL＝103.2g）から計算。</p>
     <p>調理前の重さで入れる場合と「1本分」「乾めん100g分」など：日本食品標準成分表（八訂）増補2023年 第1章「調理方法の概要及び重量変化率表」の重量変化率を使って換算。</p>
     <p>ごはん茶碗1杯、食パン1枚、納豆1パック、豆腐1/2丁、調理前の量（ささみ1本50gなど）は、このツール独自の一般的な目安で、公的な値ではありません。</p>
-    <p class="tiny muted">たんぱく質ノート v1.3</p>
+    <p class="tiny muted">たんぱく質ノート v1.3.1</p>
   </div>`;
 }
 
@@ -1276,6 +1278,7 @@ document.addEventListener('click', ev => {
     case 'prevDay': viewDate = addDays(viewDate, -1); render(); break;
     case 'nextDay': viewDate = addDays(viewDate, 1); render(); break;
     case 'dateLabel': viewDate = todayStr(); render(); break;
+    case 'todayBtn': viewDate = todayStr(); render(); window.scrollTo(0, 0); break;
     case 'saveAmt': {
       const f = foodByCode.get(sheetCtx.code);
       const grams = currentGrams();

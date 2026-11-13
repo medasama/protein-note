@@ -213,3 +213,6 @@ main{max-width:560px;margin:0 auto;padding:12px 14px}
 .pv-meals .chip.on{background:#fff;color:var(--primary)}
 .pv-actions{display:flex;gap:10px;justify-content:center}
 .pv-actions .btn.danger{color:#ffb4a6;border-color:#ffb4a6}
+.today-btn{border:none;background:var(--accent);color:#fff;border-radius:999px;padding:6px 10px;font-size:.8rem;font-weight:700;white-space:nowrap}
+/* 今日以外を見ているときは日付を目立たせる */
+body.not-today .date-label{background:var(--accent-soft);border-color:var(--accent);color:#6d4a1d;font-weight:700}

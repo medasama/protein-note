@@ -162,9 +162,7 @@ async function addPhotos(files) {
   if (unknown) msgs.push(`${unknown}枚は撮った時間がわからないため今の時間帯に入れました（タップで移せます）`);
   if (fail) msgs.push(`${fail}枚は読み込めませんでした`);
   toast(msgs.join('。'));
-  // 1枚だけで別の日なら、その日を開く
-  if (ok && placed.size === 1 && !placed.has(viewDate)) viewDate = [...placed.keys()][0];
-  render();
+  render(); // 表示中の日付は変えない
 }
 
 /* ---------- 表示 ---------- */
