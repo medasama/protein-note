@@ -1,12 +1,13 @@
 """日本食品標準成分表（八訂）増補2023年 の Excel から、ツール用の foods.json を作る。
 
-使い方: python3 -I build_foods.py <成分表xlsx> <出力foods.json>
+使い方: python3 -I build_foods.py <成分表xlsx> <出力foods.json> [rates.json]
 
 出力形式（容量を抑えるため配列）:
   {"source": {...}, "groups": [...], "foods": [[code, groupIndex, name, protein, flag, mlToG], ...]}
   protein : 可食部100gあたりの「たんぱく質」(PROT-) g。
   flag    : 0=収載値, 1=推定値（成分表で括弧付き）, 2=微量(Tr)
   mlToG   : 備考に「100 mL： X g」の記載がある食品の X（100mLあたりの重さ）。なければ null
+  rate    : 調理による重量変化率(%)（第1章の表。extract_rates.py で作る）。なければ null
 """
 import json
 import re
@@ -15,6 +16,7 @@ import sys
 import openpyxl
 
 src, out = sys.argv[1], sys.argv[2]
+rates = json.load(open(sys.argv[3])) if len(sys.argv) > 3 else {}
 wb = openpyxl.load_workbook(src, read_only=True)
 rows = list(wb["表全体"].iter_rows(values_only=True))
 
@@ -66,7 +68,7 @@ for r in rows[12:]:
         if m:
             ml = float(m.group(1))
     # 推定値かつ値が0（"(0)"）は「微量でもなく推定で0」→ 0扱い・推定フラグ
-    foods.append([code, gi, name, round(p, 1), flag, ml])
+    foods.append([code, gi, name, round(p, 1), flag, ml, rates.get(code)])
 
 data = {
     "source": {
@@ -74,6 +76,7 @@ data = {
         "publisher": "文部科学省 科学技術・学術審議会 資源調査分科会",
         "file": "第2章（データ）Excel 2026年3月27日掲載版",
         "column": "たんぱく質（PROT-）可食部100g当たり",
+        "rate": "第1章 調理方法の概要及び重量変化率表（電子書籍PDF 2026年3月27日掲載版）",
     },
     "groups": group_names,
     "foods": foods,

@@ -1,8 +1,8 @@
 // たんぱく質ノート service worker
 // ファイルを更新したら VERSION を上げる（古いキャッシュが消えて新しい版が配られる）
-const VERSION = 'pn-v1.2.0';
+const VERSION = 'pn-v1.3.0';
 const ASSETS = [
-  './', 'index.html', 'style.css', 'app.js', 'foods.json', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'app.js', 'photos.js', 'foods.json', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 self.addEventListener('install', e => {

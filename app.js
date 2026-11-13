@@ -34,32 +34,114 @@ const RDA_FACTOR = 1.25;
 // 高齢者：1.2 g/kg体重/日以上がフレイル・サルコペニア予防の可能性（p.95）
 const FRAIL_PER_KG = 1.2;
 
-/* ---------- よく使う食材と目安量（このツール独自の一般的な目安） ---------- */
+/* ---------- 目安量（個数で入れるための重さ） ----------
+   種類（kind）
+   egg : 卵の規格（農林水産省「鶏卵の規格」の重量区分の中央値）× 成分表の廃棄率・重量変化率で計算
+   ml  : 成分表の備考（100mLあたりの重さ）から計算
+   raw : 調理前の重さ（目安）× 成分表の重量変化率 で計算
+   est : このツール独自の一般的な目安
+*/
+const EGG_SIZES = [['M', 61], ['L', 67], ['MS', 55], ['S', 49], ['LL', 73], ['SS', 43]]; // 殻付き g（区分の中央値）
+const EGG_REFUSE_RAW = 0.14;    // 12004 鶏卵 全卵 生 の廃棄率（卵殻）
+const EGG_REFUSE_BOILED = 0.11; // 12005 鶏卵 全卵 ゆで の廃棄率（卵殻）
+const EGG_COOKED = ['12006', '12021', '12022', '12023']; // 割卵して調理するもの（重量変化率あり）
+
+// [表示, 重さg, 数え方] または { l: 表示, raw: 調理前のg, c: 数え方 }
+const FOOD_UNITS = {
+  '01088': [['茶碗1杯', 150, '杯'], ['小盛り', 100], ['大盛り', 200], ['どんぶり1杯', 250, '杯']],
+  '01085': [['茶碗1杯', 150, '杯']],
+  '01026': [['6枚切1枚', 60, '枚'], ['8枚切1枚', 45, '枚'], ['5枚切1枚', 72, '枚'], ['4枚切1枚', 90, '枚']],
+  '01034': [['1個', 30, '個']],
+  '01039': [['1玉', 200, '玉']],
+  '01064': [{ l: '乾めん100g分', raw: 100, c: '人前' }, { l: '乾めん80g分', raw: 80 }],
+  '01130': [{ l: '乾めん1束100g分', raw: 100, c: '束' }],
+  '01042': [{ l: '乾めん100g分', raw: 100 }],
+  '01048': [{ l: '生めん1玉分', raw: 120, c: '玉' }],
+  '04046': [['1パック', 45, 'パック'], ['小パック', 40, 'パック']],
+  '04032': [['1/2丁', 150], ['1/3丁', 100], ['1丁', 300, '丁']],
+  '04033': [['1/2丁', 150], ['1/3丁', 100], ['1丁', 300, '丁']],
+  '04040': [['1枚', 30, '枚']],
+  '04039': [['1枚', 140, '枚']],
+  '13025': [['1食分', 100]],
+  '13040': [['スライス1枚', 18, '枚']],
+  '11227': [['1本', 50, '本']],
+  '11228': [{ l: '1本分', raw: 50, c: '本' }],
+  '11229': [{ l: '1本分', raw: 50, c: '本' }],
+  '11176': [['1枚', 10, '枚']],
+  '11186': [['1本', 20, '本']],
+  '11306': [{ l: '1本分', raw: 20, c: '本' }],
+  '11307': [{ l: '1本分', raw: 20, c: '本' }],
+  '11183': [['1枚', 17, '枚']],
+  '10134': [['1切れ', 80, '切れ']],
+  '10136': [{ l: '1切れ分', raw: 80, c: '切れ' }],
+  '10139': [['1切れ', 80, '切れ']],
+  '10154': [['1切れ', 80, '切れ']],
+  '10263': [['1缶', 70, '缶']],
+  '10164': [['1缶（固形量）', 150, '缶']],
+  '10381': [['1本', 30, '本']],
+  '10376': [['1本', 10, '本']],
+  '10055': [['大さじ1', 5]],
+};
+
+/* よく使う食材（一覧の表示名） */
 const STAPLES = [
-  // units: [表示, グラム, 数え方（あと◯◯の表示用。nullならグラムで表示）]
-  { code: '12004', label: '卵', units: [['1個', 50, '個']] },
-  { code: '12005', label: 'ゆで卵', units: [['1個', 50, '個']] },
-  { code: '04046', label: '納豆', units: [['1パック', 45, 'パック']] },
-  { code: '04032', label: '木綿豆腐', units: [['1/2丁', 150, null], ['1/3丁', 100, null]] },
-  { code: '04033', label: '絹ごし豆腐', units: [['1/2丁', 150, null], ['1/3丁', 100, null]] },
-  { code: '13003', label: '牛乳', units: [['コップ1杯 200mL', 206.4, '杯']] },
-  { code: '13025', label: 'ヨーグルト（無糖）', units: [['100g', 100, null]] },
-  { code: '13040', label: 'プロセスチーズ', units: [['スライス1枚', 18, '枚']] },
-  { code: '11220', label: '鶏むね（皮なし・生）', units: [['100g', 100, null]] },
-  { code: '11227', label: 'ささみ（生）', units: [['1本', 50, '本']] },
-  { code: '11130', label: '豚もも（生）', units: [['100g', 100, null]] },
-  { code: '11123', label: '豚ロース（生）', units: [['100g', 100, null]] },
-  { code: '11163', label: '豚ひき肉（生）', units: [['100g', 100, null]] },
-  { code: '11075', label: '牛もも 輸入（生）', units: [['100g', 100, null]] },
-  { code: '10134', label: '鮭（生）', units: [['1切れ', 80, '切れ']] },
-  { code: '10139', label: '塩鮭', units: [['1切れ', 80, '切れ']] },
-  { code: '10263', label: 'ツナ缶（油漬）', units: [['1缶', 70, '缶']] },
-  { code: '10164', label: 'さば水煮缶', units: [['100g', 100, null]] },
-  { code: '01088', label: 'ごはん（白米）', units: [['茶碗1杯', 150, '杯']] },
-  { code: '01026', label: '食パン', units: [['6枚切1枚', 60, '枚']] },
-  { code: '01039', label: 'うどん（ゆで）', units: [['1玉', 200, '玉']] },
+  { code: '12004', label: '卵（生）' },
+  { code: '12005', label: 'ゆで卵' },
+  { code: '12021', label: '目玉焼き' },
+  { code: '12022', label: 'スクランブルエッグ（いり卵）' },
+  { code: '04046', label: '納豆' },
+  { code: '04032', label: '木綿豆腐' },
+  { code: '04033', label: '絹ごし豆腐' },
+  { code: '13003', label: '牛乳' },
+  { code: '13025', label: 'ヨーグルト（無糖）' },
+  { code: '13040', label: 'プロセスチーズ' },
+  { code: '11220', label: '鶏むね（皮なし・生）' },
+  { code: '11288', label: '鶏むね（皮なし・焼き）' },
+  { code: '11221', label: '鶏もも（皮つき・生）' },
+  { code: '11227', label: 'ささみ（生）' },
+  { code: '11229', label: 'ささみ（ゆで）' },
+  { code: '11130', label: '豚もも（生）' },
+  { code: '11123', label: '豚ロース（生）' },
+  { code: '11163', label: '豚ひき肉（生）' },
+  { code: '11075', label: '牛もも 輸入（生）' },
+  { code: '11176', label: 'ロースハム' },
+  { code: '11186', label: 'ウインナー' },
+  { code: '10134', label: '鮭（生）' },
+  { code: '10136', label: '焼き鮭' },
+  { code: '10139', label: '塩鮭' },
+  { code: '10263', label: 'ツナ缶（油漬）' },
+  { code: '10164', label: 'さば水煮缶' },
+  { code: '01088', label: 'ごはん（白米）' },
+  { code: '01026', label: '食パン' },
+  { code: '01039', label: 'うどん（ゆで）' },
+  { code: '01064', label: 'スパゲッティ（ゆで）' },
 ];
 const SUGGEST_CODES = ['12004', '04046', '11220', '04032', '10134', '10263', '13003', '13040'];
+
+/* 食品の目安量一覧 → [{ l: 表示, g: その食品としての重さ, c: 数え方, kind, note }] */
+function unitsFor(f) {
+  if (!f) return [];
+  const out = [];
+  if (f.code === '12004') {
+    for (const [sz, w] of EGG_SIZES) out.push({ l: `${sz}サイズ1個`, g: r1(w * (1 - EGG_REFUSE_RAW)), c: '個', kind: 'egg' });
+  } else if (f.code === '12005' && f.rate) {
+    for (const [sz, w] of EGG_SIZES) out.push({ l: `${sz}サイズ1個`, g: r1(w * f.rate / 100 * (1 - EGG_REFUSE_BOILED)), c: '個', kind: 'egg' });
+  } else if (EGG_COOKED.includes(f.code) && f.rate) {
+    for (const [sz, w] of EGG_SIZES) out.push({ l: `卵${sz}サイズ1個分`, g: r1(w * (1 - EGG_REFUSE_RAW) * f.rate / 100), c: '個', kind: 'egg' });
+  }
+  if (f.code === '13003' && f.ml) out.push({ l: 'コップ1杯 200mL', g: r1(200 * f.ml / 100), c: '杯', kind: 'ml' });
+  for (const u of FOOD_UNITS[f.code] || []) {
+    if (Array.isArray(u)) out.push({ l: u[0], g: u[1], c: u[2] || null, kind: 'est' });
+    else if (f.rate) out.push({ l: u.l, g: r1(u.raw * f.rate / 100), c: u.c || null, kind: 'raw', raw: u.raw });
+  }
+  return out;
+}
+function unitNote(u, f) {
+  if (u.kind === 'egg') return '卵の重さは農林水産省「鶏卵の規格」の重量区分の中央値から、殻の分（成分表の廃棄率）' + (f.rate ? `と調理による重さの変化（重量変化率${f.rate}%）` : '') + 'を除いて計算しています。';
+  if (u.kind === 'ml') return `成分表の備考（100mL＝${f.ml}g）から計算しています。`;
+  if (u.kind === 'raw') return `調理前${u.raw}g（一般的な目安）に、成分表の重量変化率${f.rate}%をかけた重さです。`;
+  return '1個・1枚などの重さは一般的な目安です。実際の重さがわかるときは「g」で入れてください。';
+}
 
 /* 検索の言い換え（漢字・通称 → 成分表の表記） */
 const ALIASES = {
@@ -88,7 +170,7 @@ let viewDate = todayStr();
 let currentTab = 'today';
 
 function defaultState() {
-  return { profile: null, days: {}, myList: [], recent: {} };
+  return { profile: null, days: {}, myList: [], recent: {}, photoKeepDays: 30 };
 }
 function loadState() {
   try {
@@ -142,7 +224,7 @@ function toast(msg) {
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => { t.hidden = true; }, 2200);
+  toast._t = setTimeout(() => { t.hidden = true; }, Math.max(2200, String(msg).length * 90));
 }
 
 /* カタカナ→ひらがな、全角半角統一、記号・空白除去 */
@@ -217,7 +299,7 @@ function addEntry(d, entry) {
   state.days[d].push(Object.assign({ id: uid() }, entry));
   if (entry.code) {
     const r = state.recent[entry.code] || { n: 0 };
-    state.recent[entry.code] = { n: r.n + 1, g: entry.grams, t: Date.now() };
+    state.recent[entry.code] = Object.assign({}, r, { n: r.n + 1, g: entry.grams, t: Date.now() });
   }
   if (entry.mlId) {
     const k = 'ml:' + entry.mlId;
@@ -249,9 +331,9 @@ async function loadFoods() {
   try {
     const res = await fetch('foods.json');
     const data = await res.json();
-    foods = data.foods.map(([code, g, name, p, f, ml]) => {
+    foods = data.foods.map(([code, g, name, p, f, ml, rate]) => {
       const { main, sub } = splitName(name);
-      return { code, g, name, p, f, ml, main, sub, group: data.groups[g], key: norm(name) };
+      return { code, g, name, p, f, ml, rate: rate || null, main, sub, group: data.groups[g], key: norm(name) };
     });
     foodByCode = new Map(foods.map(x => [x.code, x]));
     foodsReady = true;
@@ -368,11 +450,18 @@ function renderToday() {
     if (remain > 0 && foodsReady) html += renderSuggestions(remain);
   }
 
+  // 写真
+  html += `<div class="photo-bar">
+    <button class="btn ghost small" id="photoAddBtn">📷 食べたものの写真を入れる</button>
+    <span class="tiny muted">撮った時間で朝・昼・夕・間食に振り分けます</span>
+  </div>`;
+
   // 食事
   for (const [m, label] of MEALS) {
     const list = dayEntries(viewDate).filter(e => e.meal === m);
     html += `<div class="card">
       <div class="meal-head"><h2>${label}</h2><span class="meal-total">${fmt(mealTotal(viewDate, m))}g</span></div>
+      <div class="pstrip" data-pmeal="${m}"></div>
       ${list.map(e => `<button class="entry" data-edit="${e.id}">
           <span class="nm"><div>${esc(e.name)}</div><div class="tiny muted">${esc(entryAmountLabel(e))}</div></span>
           <span class="pg">${fmt(e.protein)}g</span>
@@ -385,29 +474,33 @@ function renderToday() {
   }
   html += `<p class="tiny muted" style="text-align:center">食品の値：日本食品標準成分表（八訂）増補2023年から引用</p>`;
   el.innerHTML = html;
+  fillPhotoStrips();
 }
 
 function renderSuggestions(remain) {
   const items = SUGGEST_CODES.map(c => {
     const f = foodByCode.get(c);
-    const s = STAPLES.find(x => x.code === c);
-    if (!f || !s) return null;
-    const [uLabel, g, counter] = s.units[0];
-    const per = proteinFor(f, g);
-    let need;
-    if (counter) need = `約${fmt(Math.ceil((remain / per) * 2) / 2)}${counter}`; // 0.5単位で切上げ
-    else need = `約${Math.ceil((remain / f.p) * 100 / 10) * 10}g`;           // 10g単位で切上げ
-    return { f, s, uLabel, g, per, need };
+    const st = STAPLES.find(x => x.code === c);
+    const u = unitsFor(f)[0];
+    if (!f || !st || !u) {
+      if (!f || !st) return null;
+      // 目安量がない食品は100gで
+      const per = proteinFor(f, 100);
+      return { f, label: st.label, uLabel: '100g', g: 100, per, need: `約${Math.ceil((remain / f.p) * 100 / 10) * 10}g` };
+    }
+    const per = proteinFor(f, u.g);
+    const need = u.c ? `約${fmt(Math.ceil((remain / per) * 2) / 2)}${u.c}` : `約${Math.ceil((remain / f.p) * 100 / 10) * 10}g`;
+    return { f, label: st.label, uLabel: u.l, g: u.g, per, need };
   }).filter(Boolean);
   return `<div class="card">
     <h2>あと${fmt(remain)}gをとるなら</h2>
     <div class="sugg">
-      ${items.map(x => `<button data-quick="${x.f.code}" data-g="${x.g}">
-        <b>${esc(x.s.label)}</b>
+      ${items.map(x => `<button data-quick="${x.f.code}">
+        <b>${esc(x.label)}</b>
         ${esc(x.uLabel)}で${fmt(x.per)}g<br><span class="muted">→ ${x.need}分</span>
       </button>`).join('')}
     </div>
-    <div class="tiny muted" style="margin-top:6px">どれか1つでとる場合の量です。タップで記録できます。量の目安はこのツール独自の一般的な目安です。</div>
+    <div class="tiny muted" style="margin-top:6px">どれか1つでとる場合の量です。タップで記録できます。</div>
   </div>`;
 }
 
@@ -451,6 +544,7 @@ function renderHistory() {
 
 function renderSettings() {
   const el = $('#tab-settings');
+  photoCount().then(n => { const x = $('#photoCountLabel'); if (x) x.textContent = `保存中の写真：${n}枚`; });
   const p = state.profile || {};
   const t = computeTargets(state.profile);
   el.innerHTML = `
@@ -500,6 +594,17 @@ function renderSettings() {
   </div>
 
   <div class="card">
+    <h2>写真</h2>
+    <p class="small muted" style="margin-top:0">食べたものを思い出すための写真です。縮小してこの端末の中だけに保存し、外部には送りません。バックアップには含まれません。</p>
+    <div class="field"><label for="keepDays">写真を残す期間</label>
+      <select id="keepDays">
+        ${[[7, '7日'], [30, '30日'], [90, '90日'], [0, '無期限（自分で削除）']].map(([v, l]) => `<option value="${v}" ${Number(state.photoKeepDays == null ? 30 : state.photoKeepDays) === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <div class="hint">期間を過ぎた写真は、次に開いたときに自動で消えます（記録は消えません）</div></div>
+    <div class="small muted" id="photoCountLabel"></div>
+  </div>
+
+  <div class="card">
     <h2>データの保存</h2>
     <p class="small muted" style="margin-top:0">記録はこの端末のブラウザの中だけに保存され、外部には送信されません。機種変更やブラウザのデータ削除で消えるため、ときどきバックアップしてください。</p>
     <div class="meal-actions" style="flex-wrap:wrap">
@@ -523,9 +628,12 @@ function renderSettings() {
     <p class="tiny muted">乳児（1歳未満）の目安量：0〜5か月 10g、6〜8か月 15g、9〜11か月 25g（p.103）</p>
     <h3>食品のたんぱく質量</h3>
     <p>日本食品標準成分表（八訂）増補2023年から引用（文部科学省 科学技術・学術審議会 資源調査分科会、2026年3月27日掲載のデータ）。「たんぱく質」の列の値を使用。</p>
-    <h3>目安量（1個・1切れなど）</h3>
-    <p>「卵1個＝50g」などの目安量はこのツール独自の一般的な目安で、公的な値ではありません。牛乳200mL＝206.4gは成分表の備考（100mL＝103.2g）から計算しています。</p>
-    <p class="tiny muted">たんぱく質ノート v1.2</p>
+    <h3>個数で入れるときの重さ</h3>
+    <p>卵：農林水産省「鶏卵の規格」（畜産物の価格安定に関する法律施行規則の規定に基づく鶏卵の規格）の重量区分（例：M 58g以上64g未満）の中央値から、成分表の廃棄率（殻）を除いて計算。目玉焼きなどは、さらに成分表の重量変化率をかけています。</p>
+    <p>牛乳200mL：成分表の備考（100mL＝103.2g）から計算。</p>
+    <p>調理前の重さで入れる場合と「1本分」「乾めん100g分」など：日本食品標準成分表（八訂）増補2023年 第1章「調理方法の概要及び重量変化率表」の重量変化率を使って換算。</p>
+    <p>ごはん茶碗1杯、食パン1枚、納豆1パック、豆腐1/2丁、調理前の量（ささみ1本50gなど）は、このツール独自の一般的な目安で、公的な値ではありません。</p>
+    <p class="tiny muted">たんぱく質ノート v1.3</p>
   </div>`;
 }
 
@@ -556,6 +664,7 @@ function openAdd(meal) {
   const segs = [['ml', 'マイリスト'], ['hist', '履歴'], ['search', '食材']];
   openSheet(`${mealLabel(meal)}に追加`, `
     <input class="search" id="q" type="search" placeholder="食材名で検索（例：鶏むね、納豆、さけ）" autocomplete="off">
+    ${photoStripForSheet()}
     <div class="seg" id="seg">${segs.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div id="results"></div>`, sh => {
     const q = $('#q', sh);
@@ -586,11 +695,7 @@ function mlSorted() {
   return state.myList.slice().sort((a, b) => ((state.recent['ml:' + b.id] || {}).n || 0) - ((state.recent['ml:' + a.id] || {}).n || 0));
 }
 function mlAmountLabel(it) {
-  if (it.kind === 'food') {
-    const st = STAPLES.find(x => x.code === it.code);
-    const u = st && st.units.find(u => Math.abs(u[1] - it.grams) < 0.05 && u[0] !== `${u[1]}g`);
-    return u ? `${u[0]}（${fmt(it.grams)}g）` : `${fmt(it.grams)}g`;
-  }
+  if (it.kind === 'food') return it.desc || `${fmt(it.grams)}g`;
   if (it.kind === 'menu') return '1食';
   if (it.basis === '100g') return `${fmt(it.defGrams || 100)}g`;
   return it.unit || '1個';
@@ -600,7 +705,7 @@ function mlEntry(it, meal) {
   if (it.kind === 'food') {
     const f = foodByCode.get(it.code);
     if (!f) return null;
-    return { meal, mlId: it.id, code: it.code, name: it.name, grams: it.grams, protein: proteinFor(f, it.grams) };
+    return { meal, mlId: it.id, code: it.code, name: it.name, grams: it.grams, protein: proteinFor(f, it.grams), amode: it.amode, ulabel: it.ulabel, count: it.count, raw: it.raw, desc: it.desc };
   }
   const item = mlItem(it);
   const is100 = item.basis === '100g';
@@ -631,7 +736,7 @@ function mlRow(it) {
 
 /* 過去の記録から、同じ内容（同じ量）のものを1件ずつ新しい順に */
 function entryKey(e) {
-  if (e.code) return `c:${e.code}:${e.grams}`;
+  if (e.code) return `c:${e.code}:${e.grams}:${e.desc || ''}`;
   return `${e.kind || 'my'}:${e.refId || e.myId || e.name}:${e.basis === '100g' ? e.grams : e.qty}`;
 }
 function historyItems(limit = 40) {
@@ -651,6 +756,7 @@ function historyItems(limit = 40) {
   return out;
 }
 function entryAmountLabel(e) {
+  if (e.desc) return e.desc;
   if (e.code || e.basis === '100g') return `${fmt(e.grams)}g`;
   return `${fmt(e.qty)} × ${e.unit || '1食'}`;
 }
@@ -707,61 +813,113 @@ function renderResults() {
       : `<div class="empty">成分表では見つかりませんでした。<br>ひらがなや別の言い方でも試してください（例：「とり」→「にわとり」、「ごはん」→「めし」）。</div>${regBtn}`);
 }
 
-/* --- 量を入れる --- */
+/* --- 量を入れる（個数／g／調理前のg） --- */
 function openAmount(code, opts = {}) {
   const f = foodByCode.get(code);
   if (!f) return;
   const staple = STAPLES.find(s => s.code === code);
-  const last = state.recent[code];
+  const units = unitsFor(f);
+  const last = state.recent[code] || {};
   const editing = opts.entry || null;
-  const ctx = {
+  const src = editing || opts.preset || null; // 以前の入れ方を再現する
+  let mode = units.length ? 'unit' : 'g';
+  let unitIdx = 0, count = 1, value = 100, raw = 100, unit = 'g';
+  if (src && src.amode) {
+    mode = src.amode;
+    if (mode === 'unit') { const k = units.findIndex(u => u.l === src.ulabel); unitIdx = k >= 0 ? k : 0; count = src.count || 1; if (k < 0) { mode = 'g'; value = src.grams; } }
+    if (mode === 'raw') raw = src.raw || 100;
+    if (mode === 'g') value = src.grams;
+  } else if (src && src.grams) {
+    mode = 'g'; value = src.grams;
+  } else if (last.amode) {
+    mode = last.amode === 'raw' && !f.rate ? 'g' : last.amode;
+    if (mode === 'unit') { const k = units.findIndex(u => u.l === last.ulabel); unitIdx = k >= 0 ? k : 0; if (!units.length) mode = 'g'; }
+    if (mode === 'raw') raw = last.raw || 100;
+    if (mode === 'g') value = last.g || 100;
+  }
+  sheetCtx = Object.assign(sheetCtx || {}, {
     meal: editing ? editing.meal : (opts.meal || (sheetCtx && sheetCtx.meal) || guessMeal()),
-    code, unit: 'g',
-    value: editing ? editing.grams : (opts.grams || (staple ? staple.units[0][1] : (last && last.g) || 100)),
-    editing,
+    code, amode: mode, unitIdx, count, value, raw, unit, editing, units,
     mlId: editing ? editing.mlId : (opts.mlId || null),
     label: editing ? editing.name : (opts.label || null),
-  };
-  if (!editing && opts.grams == null && staple && staple.units[0][0].includes('mL') && f.ml) {
-    ctx.unit = 'mL'; ctx.value = 200;
-  }
-  sheetCtx = Object.assign(sheetCtx || {}, ctx);
-
-  const realUnits = (staple ? staple.units : []).filter(([l, g]) => l !== `${g}g`);
-  const unitChips = realUnits.map(([l, g]) => `<button class="chip" data-g="${g}">${esc(l)}（${fmt(g)}g）</button>`).join('');
-  openSheet(editing ? '記録を修正' : esc(staple ? staple.label : f.main), `
+  });
+  const title = editing ? '記録を修正' : esc(opts.label || (staple ? staple.label : f.main));
+  openSheet(title, `
+    ${photoStripForSheet()}
     <div class="small">${esc(f.name)}</div>
-    <div class="tiny muted">100gあたり たんぱく質 ${fmt(f.p)}g${f.f === 1 ? '（推定値）' : f.f === 2 ? '（微量）' : ''}・食べる部分の重さを入れてください</div>
+    <div class="tiny muted">100gあたり たんぱく質 ${fmt(f.p)}g${f.f === 1 ? '（推定値）' : f.f === 2 ? '（微量）' : ''}</div>
     <div class="meal-pick">${MEALS.map(([m, l]) => `<button class="chip ${m === sheetCtx.meal ? 'on' : ''}" data-meal="${m}">${l}</button>`).join('')}</div>
-    <div class="amount-box">
-      <input id="amt" type="number" inputmode="decimal" min="0" step="any" value="${fmt(sheetCtx.value)}">
-      ${f.ml ? `<div class="seg" style="margin:0;flex:none"><button data-unit="g" class="${sheetCtx.unit === 'g' ? 'on' : ''}">g</button><button data-unit="mL" class="${sheetCtx.unit === 'mL' ? 'on' : ''}">mL</button></div>` : '<span class="u">g</span>'}
+    <div class="seg" id="amodeSeg">
+      ${units.length ? `<button data-amode="unit">個数で</button>` : ''}
+      <button data-amode="g">重さ（g）で</button>
+      ${f.rate ? `<button data-amode="raw">調理前の重さで</button>` : ''}
     </div>
-    <div class="chips">
-      ${unitChips}
-      ${[50, 100, 150, 200].map(g => `<button class="chip" data-g="${g}" data-plain="1">${g}${f.ml && sheetCtx.unit === 'mL' ? 'mL' : 'g'}</button>`).join('')}
-    </div>
-    ${realUnits.length ? `<div class="note">「${esc(realUnits.map(u => u[0]).join('・'))}」の重さは一般的な目安です。実際の重さがわかるときは数字を入れてください。</div>` : ''}
-    <div class="result"><span>たんぱく質</span><b id="calc">0g</b></div>
+    <div id="amodeBody"></div>
+    <div class="result"><span>たんぱく質 <span class="tiny muted" id="gramsLabel"></span></span><b id="calc">0g</b></div>
     <button class="btn block" id="saveAmt">${editing ? '修正する' : '記録する'}</button>
     <div class="meal-actions"><button class="btn ghost small block" id="starBtn">☆ この量でマイリストへ</button></div>
     ${editing ? '<div class="meal-actions"><button class="btn danger small block" id="delEntry">この記録を削除</button></div>' : ''}
-  `, sh => {
-    const amt = $('#amt', sh);
-    const upd = () => {
-      const grams = currentGrams();
-      $('#calc', sh).textContent = `${fmt(proteinFor(f, grams))}g`;
-      $('#saveAmt', sh).disabled = !(grams > 0);
-      $('#starBtn', sh).disabled = !(grams > 0);
-    };
-    amt.addEventListener('input', () => { sheetCtx.value = Number(amt.value) || 0; upd(); });
-    upd();
-  });
+  `, () => renderAmountBody());
+}
+function renderAmountBody() {
+  const c = sheetCtx;
+  const f = foodByCode.get(c.code);
+  document.querySelectorAll('#amodeSeg button').forEach(b => b.classList.toggle('on', b.dataset.amode === c.amode));
+  const box = $('#amodeBody');
+  if (c.amode === 'unit') {
+    const u = c.units[c.unitIdx];
+    box.innerHTML = `
+      <div class="chips unit-chips">${c.units.map((x, i) => `<button class="chip ${i === c.unitIdx ? 'on' : ''}" data-uidx="${i}">${esc(x.l)}</button>`).join('')}</div>
+      <div class="stepper">
+        <button class="step" data-cnt="-0.5" aria-label="減らす">−</button>
+        <div class="cnt"><b id="cntVal">${fmt(c.count)}</b><span>${esc(u.c ? u.c : '× ' + u.l)}</span></div>
+        <button class="step" data-cnt="0.5" aria-label="増やす">＋</button>
+      </div>
+      <div class="note">${esc(unitNote(u, f))}</div>`;
+  } else if (c.amode === 'raw') {
+    box.innerHTML = `
+      <div class="amount-box"><input id="rawAmt" type="number" inputmode="decimal" min="0" step="any" value="${fmt(c.raw)}"><span class="u">g</span></div>
+      <div class="chips">${[50, 80, 100, 150, 200].map(g => `<button class="chip" data-rawg="${g}">${g}g</button>`).join('')}</div>
+      <div class="note">肉のパックの表示など、調理する前（生・乾めんなど）の重さを入れてください。成分表の重量変化率（${f.rate}%）で、この料理の重さに換算します。</div>`;
+    $('#rawAmt').addEventListener('input', ev => { c.raw = Number(ev.target.value) || 0; updAmount(); });
+  } else {
+    box.innerHTML = `
+      <div class="amount-box">
+        <input id="amt" type="number" inputmode="decimal" min="0" step="any" value="${fmt(c.value)}">
+        ${f.ml ? `<div class="seg" style="margin:0;flex:none"><button data-unit="g" class="${c.unit === 'g' ? 'on' : ''}">g</button><button data-unit="mL" class="${c.unit === 'mL' ? 'on' : ''}">mL</button></div>` : '<span class="u">g</span>'}
+      </div>
+      <div class="chips">${[50, 100, 150, 200].map(g => `<button class="chip" data-g="${g}">${g}${f.ml && c.unit === 'mL' ? 'mL' : 'g'}</button>`).join('')}</div>
+      <div class="tiny muted" style="margin-top:6px">食べる部分の重さを入れてください</div>`;
+    $('#amt').addEventListener('input', ev => { c.value = Number(ev.target.value) || 0; updAmount(); });
+  }
+  updAmount();
+}
+function updAmount() {
+  const f = foodByCode.get(sheetCtx.code);
+  const g = currentGrams();
+  $('#calc').textContent = `${fmt(proteinFor(f, g))}g`;
+  $('#gramsLabel').textContent = g > 0 && sheetCtx.amode !== 'g' ? `（${fmt(g)}g）` : '';
+  $('#saveAmt').disabled = !(g > 0);
+  $('#starBtn').disabled = !(g > 0);
 }
 function currentGrams() {
-  const f = foodByCode.get(sheetCtx.code);
-  const v = Number(sheetCtx.value) || 0;
-  return sheetCtx.unit === 'mL' && f.ml ? r1(v * f.ml / 100) : v;
+  const c = sheetCtx;
+  const f = foodByCode.get(c.code);
+  if (c.amode === 'unit') { const u = c.units[c.unitIdx]; return u ? r1(u.g * c.count) : 0; }
+  if (c.amode === 'raw') return f.rate ? r1(c.raw * f.rate / 100) : 0;
+  const v = Number(c.value) || 0;
+  return c.unit === 'mL' && f.ml ? r1(v * f.ml / 100) : v;
+}
+/* 記録に残す「どう入れたか」 */
+function amountMeta() {
+  const c = sheetCtx;
+  const g = currentGrams();
+  if (c.amode === 'unit') {
+    const u = c.units[c.unitIdx];
+    return { amode: 'unit', ulabel: u.l, count: c.count, desc: `${u.l}${c.count !== 1 ? ' ×' + fmt(c.count) : ''}（${fmt(g)}g）` };
+  }
+  if (c.amode === 'raw') return { amode: 'raw', raw: c.raw, desc: `調理前${fmt(c.raw)}g（${fmt(g)}g）` };
+  return { amode: 'g', desc: c.unit === 'mL' ? `${fmt(c.value)}mL（${fmt(g)}g）` : `${fmt(g)}g` };
 }
 function guessMeal() {
   const h = new Date().getHours();
@@ -776,11 +934,12 @@ function starCurrentFood() {
   const f = foodByCode.get(sheetCtx.code);
   const grams = currentGrams();
   if (!f || !(grams > 0)) return;
+  const meta = amountMeta();
   if (state.myList.some(x => x.kind === 'food' && x.code === f.code && Math.abs(x.grams - grams) < 0.05)) {
     toast('同じ量ですでにマイリストに入っています'); return;
   }
   const st = STAPLES.find(x => x.code === f.code);
-  const it = { id: uid(), kind: 'food', code: f.code, grams, name: st ? st.label : f.main };
+  const it = Object.assign({ id: uid(), kind: 'food', code: f.code, grams, name: sheetCtx.label || (st ? st.label : f.main) }, meta);
   state.myList.push(it);
   saveState();
   toast(`マイリストに入れました（${it.name} ${mlAmountLabel(it)}）`);
@@ -899,6 +1058,7 @@ function openMlFoodForm(it) {
       const g = Number($('#mfG', sh).value);
       const name = $('#mfName', sh).value.trim();
       if (!name || !(g > 0)) return;
+      if (Math.abs(g - it.grams) > 0.05) Object.assign(it, { amode: 'g', desc: `${fmt(g)}g`, ulabel: null, count: null, raw: null });
       Object.assign(it, { name, grams: g });
       saveState(); toast('保存しました'); closeSheet(); render();
     });
@@ -981,7 +1141,7 @@ function adjustMl(id) {
   const it = state.myList.find(x => x.id === id);
   if (!it) return;
   if (it.kind === 'food') {
-    openAmount(it.code, { grams: it.grams, mlId: it.id, label: it.name });
+    openAmount(it.code, { preset: it, mlId: it.id, label: it.name });
   } else {
     openItemAmount(mlItem(it), null, it.basis === '100g' ? (it.defGrams || 100) : 1, it.id);
   }
@@ -1041,6 +1201,7 @@ document.addEventListener('click', ev => {
   const b = ev.target.closest('button, [data-close]');
   if (!b) {
     if (ev.target.id === 'sheetBackdrop') closeSheet();
+    if (ev.target.id === 'photoViewer') closePhotoViewer();
     return;
   }
   const ds = b.dataset;
@@ -1051,7 +1212,9 @@ document.addEventListener('click', ev => {
   if (ds.add) { openAdd(ds.add); return; }
   if (ds.copy) { copyPrevMeal(ds.copy); return; }
   if (ds.edit) { openEdit(ds.edit); return; }
-  if (ds.quick) { sheetCtx = { meal: guessMeal() }; openAmount(ds.quick, { grams: Number(ds.g) }); return; }
+  if (ds.quick) { sheetCtx = { meal: guessMeal() }; openAmount(ds.quick); return; }
+  if (ds.photo) { openPhotoViewer(ds.photo); return; }
+  if (ds.pmove) { movePhoto(ds.pmove); return; }
   if (ds.day) { viewDate = ds.day; switchTab('today'); return; }
   if (ds.pick) { openAmount(ds.pick); return; }
   if (ds.hist) { addFromHistory(Number(ds.hist)); return; }
@@ -1069,26 +1232,37 @@ document.addEventListener('click', ev => {
     document.querySelectorAll('.meal-pick .chip').forEach(c => c.classList.toggle('on', c.dataset.meal === ds.meal));
     return;
   }
+  if (ds.amode && sheetCtx && sheetCtx.code) {
+    // 切り替えても重さを引き継ぐ
+    const g = currentGrams();
+    const f = foodByCode.get(sheetCtx.code);
+    sheetCtx.amode = ds.amode;
+    if (ds.amode === 'g') { sheetCtx.unit = 'g'; sheetCtx.value = g || 100; }
+    if (ds.amode === 'raw' && f.rate && g) sheetCtx.raw = r1(g * 100 / f.rate);
+    renderAmountBody();
+    return;
+  }
+  if (ds.uidx && sheetCtx && sheetCtx.code) { sheetCtx.unitIdx = Number(ds.uidx); renderAmountBody(); return; }
+  if (ds.cnt && sheetCtx && sheetCtx.code) {
+    sheetCtx.count = Math.max(0.5, r1(sheetCtx.count + Number(ds.cnt)));
+    $('#cntVal').textContent = fmt(sheetCtx.count);
+    updAmount();
+    return;
+  }
+  if (ds.rawg && sheetCtx && sheetCtx.code) { sheetCtx.raw = Number(ds.rawg); $('#rawAmt').value = ds.rawg; updAmount(); return; }
   if (ds.unit && sheetCtx && sheetCtx.code) {
     const f = foodByCode.get(sheetCtx.code);
     if (ds.unit === sheetCtx.unit) return;
     const grams = currentGrams();
     sheetCtx.unit = ds.unit;
     sheetCtx.value = ds.unit === 'mL' ? r1(grams * 100 / f.ml) : grams;
-    $('#amt').value = fmt(sheetCtx.value);
-    document.querySelectorAll('[data-unit]').forEach(x => x.classList.toggle('on', x.dataset.unit === ds.unit));
-    document.querySelectorAll('[data-plain]').forEach(x => { x.textContent = x.dataset.g + (ds.unit === 'mL' ? 'mL' : 'g'); });
-    $('#amt').dispatchEvent(new Event('input'));
+    renderAmountBody();
     return;
   }
   if (ds.g && sheetCtx && sheetCtx.code) {
-    const f = foodByCode.get(sheetCtx.code);
-    let v = Number(ds.g);
-    // 目安量チップはg基準。mL表示中なら換算
-    if (!ds.plain && sheetCtx.unit === 'mL' && f.ml) v = r1(v * 100 / f.ml);
-    sheetCtx.value = v;
-    $('#amt').value = fmt(v);
-    $('#amt').dispatchEvent(new Event('input'));
+    sheetCtx.value = Number(ds.g);
+    $('#amt').value = ds.g;
+    updAmount();
     return;
   }
   if (ds.q && sheetCtx && sheetCtx.item) {
@@ -1107,8 +1281,10 @@ document.addEventListener('click', ev => {
       const grams = currentGrams();
       if (!(grams > 0)) return;
       const staple = STAPLES.find(s => s.code === f.code);
-      const data = { meal: sheetCtx.meal, code: f.code, name: sheetCtx.label || (staple ? staple.label : f.main), grams, protein: proteinFor(f, grams) };
+      const meta = amountMeta();
+      const data = Object.assign({ meal: sheetCtx.meal, code: f.code, name: sheetCtx.label || (staple ? staple.label : f.main), grams, protein: proteinFor(f, grams) }, meta);
       if (sheetCtx.mlId) data.mlId = sheetCtx.mlId;
+      state.recent[f.code] = Object.assign(state.recent[f.code] || { n: 0 }, { amode: meta.amode, ulabel: meta.ulabel, raw: meta.raw, g: grams });
       if (sheetCtx.editing) { updateEntry(viewDate, sheetCtx.editing.id, data); toast('修正しました'); }
       else { addEntry(viewDate, data); toast(`${data.name} ${fmt(data.protein)}g を記録しました`); }
       closeSheet(); render();
@@ -1136,15 +1312,20 @@ document.addEventListener('click', ev => {
     case 'exportBtn': exportData(); break;
     case 'importBtn': $('#importFile').click(); break;
     case 'starBtn': starCurrentFood(); break;
+    case 'photoAddBtn': $('#photoInput').click(); break;
+    case 'pvDelete': deleteViewedPhoto(); break;
+    case 'pvClose': closePhotoViewer(); break;
     case 'wipeBtn':
       if (confirm('すべての記録・設定・マイ食品を削除します。元に戻せません。よろしいですか？')) {
-        state = defaultState(); saveState(); render(); toast('削除しました');
+        state = defaultState(); saveState(); deleteAllPhotos().then(render); toast('削除しました');
       }
       break;
   }
 });
 
 document.addEventListener('change', ev => {
+  if (ev.target.id === 'photoInput' && ev.target.files.length) { addPhotos(Array.from(ev.target.files)); ev.target.value = ''; }
+  if (ev.target.id === 'keepDays') { state.photoKeepDays = Number(ev.target.value); saveState(); cleanupPhotos(); toast('保存しました'); }
   if (ev.target.id === 'importFile' && ev.target.files[0]) importData(ev.target.files[0]);
   if (ev.target.name === 'sex') $('#statusField').hidden = ev.target.value !== 'f';
 });
@@ -1163,7 +1344,10 @@ document.addEventListener('submit', ev => {
   toast('保存しました');
   switchTab('today');
 });
-document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeSheet(); });
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape') return;
+  if (!$('#photoViewer').hidden) closePhotoViewer(); else closeSheet();
+});
 
 function switchTab(tab) {
   currentTab = tab;
@@ -1177,6 +1361,7 @@ function switchTab(tab) {
 if (!state.profile) currentTab = 'today';
 render();
 loadFoods();
+cleanupPhotos();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
